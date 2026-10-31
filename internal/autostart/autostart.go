@@ -66,17 +66,21 @@ func Refresh() error { return refresh() }
 
 // self is the program to start: this one, where it will be at login.
 func self() (string, error) {
-	// an AppImage runs from a folder mounted anew each time; the file
-	// itself is where it's kept
-	if p := os.Getenv("APPIMAGE"); p != "" {
-		return p, nil
-	}
 	exe, err := os.Executable()
 	if err != nil {
 		return "", err
 	}
 	if p, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = p
+	}
+	// an AppImage runs from a folder mounted anew each time; the file
+	// itself is where it's kept. But every program an AppImage starts
+	// inherits APPIMAGE, so a magpie run from another app's terminal has
+	// another app's image there (#4490): it is magpie's own only when
+	// this executable runs under that image's mount, APPDIR — the way
+	// appdir.Beside tells its own.
+	if img := os.Getenv("APPIMAGE"); img != "" && within(exe, os.Getenv("APPDIR")) {
+		return img, nil
 	}
 	// a Mac app opened where it was downloaded runs from a copy the system
 	// makes somewhere random, gone at the next login
@@ -114,4 +118,13 @@ func repointed(v, from, to string) (string, bool) {
 		return "", false
 	}
 	return `"` + to + `"` + rest, true
+}
+
+// within says whether path lies in the absolute folder dir.
+func within(path, dir string) bool {
+	if !filepath.IsAbs(dir) {
+		return false
+	}
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

@@ -205,9 +205,12 @@ func valuesType(vals []gjson.Result) string {
 // model and mode want, so no number is written here. Models that take a
 // range — moonshot-v1-*, kimi-k2-0905-preview, kimi-k2-thinking,
 // kimi-latest — keep what the user set, as does anyone not served by
-// Moonshot.
+// Moonshot. Kimi models on Volcengine Ark's Coding / Agent Plan are locked
+// the same way ("`temperature` only 1 is allowed for this model", #4495),
+// so the volcengine preset counts here too; its other models never name a
+// locked one.
 func kimiLockedSampling(p provider.Provider, to provider.Protocol, body []byte) []byte {
-	if !isKimi(p, to) {
+	if !isKimi(p, to) && p.Preset != "volcengine" {
 		return body
 	}
 	if !kimiLockedSamplingModel(gjson.GetBytes(body, "model").String()) {

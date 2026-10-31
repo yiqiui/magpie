@@ -193,7 +193,12 @@ func TestKimiLockedSampling(t *testing.T) {
 	moonshot.ID, moonshot.Key = "moonshot", "k"
 	moonshot.Models = []string{"moonshot-v1-8k", "kimi-k2.5", "kimi-k2.6", "kimi-k2-0905-preview", "kimi-k2-thinking", "moonshotai/kimi-k2.6"}
 	other := provider.Provider{ID: "other", Name: "Other", Key: "k", Chat: "https://other.test/v1", Models: []string{"m"}}
-	for _, p := range []provider.Provider{kimi, moonshot, other} {
+	ark, err := provider.FromPreset("volcengine")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ark.ID, ark.Key, ark.Models = "ark", "k", []string{"kimi-k3.1-pro", "kimi-k2.8-preview", "doubao-seed-1-8"}
+	for _, p := range []provider.Provider{kimi, moonshot, other, ark} {
 		if err := provider.Save(p); err != nil {
 			t.Fatal(err)
 		}
@@ -312,6 +317,24 @@ func TestKimiLockedSampling(t *testing.T) {
 		}
 		if v := gjson.Get(got.body, "temperature"); !v.Exists() || v.Raw != "0.1" {
 			t.Errorf("kimi-k2-thinking's temperature was not kept: %s", got.body)
+		}
+	})
+	t.Run("volcengine ark's kimi drops the fields", func(t *testing.T) {
+		got := post(t, "/v1/chat/completions", `{"model":"ark/kimi-k3.1-pro","messages":[{"role":"user","content":"hi"}],"temperature":0.6,"top_p":1}`)
+		if got.host != "ark.cn-beijing.volces.com" {
+			t.Fatalf("the request went to %s", got.host)
+		}
+		if gjson.Get(got.body, "temperature").Exists() || gjson.Get(got.body, "top_p").Exists() {
+			t.Errorf("ark's kimi-k3.1-pro was sent the sampling fields: %s", got.body)
+		}
+	})
+	t.Run("volcengine ark's own model keeps the user's temperature", func(t *testing.T) {
+		got := post(t, "/v1/chat/completions", `{"model":"ark/doubao-seed-1-8","messages":[{"role":"user","content":"hi"}],"temperature":0.6,"top_p":1}`)
+		if got.host != "ark.cn-beijing.volces.com" {
+			t.Fatalf("the request went to %s", got.host)
+		}
+		if v := gjson.Get(got.body, "temperature"); !v.Exists() || v.Raw != "0.6" {
+			t.Errorf("doubao's temperature was not kept: %s", got.body)
 		}
 	})
 	t.Run("another provider is sent the body as it was", func(t *testing.T) {
